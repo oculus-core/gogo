@@ -1,0 +1,46 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-json
+      - id: check-merge-conflict
+  # Primary Go linting and formatting
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.64.5
+    hooks:
+      - id: golangci-lint
+        args: [--timeout=5m]
+  # Additional Go tools
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: go-mod-tidy
+      - id: go-unit-tests
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.37.0
+    hooks:
+      - id: markdownlint
+        name: markdownlint
+        args: ["--fix"]
+        types: [markdown]
+  # Local hooks
+  - repo: local
+    hooks:
+      - id: custom-go-build
+        name: custom-go-build
+        entry: bash -c 'go build $(go list ./... | grep -v "github.com/oculus-core/gogo/test/integration")'
+        language: system
+        pass_filenames: false
+        description: Run go build on all packages except integration tests
+      - id: go-imports-local
+        name: go-imports
+        entry: bash -c 'export PATH="$PATH:$HOME/go/bin" && goimports -w'
+        language: system
+        files: \.go$
+        description: Run goimports on Go source files
