@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# github-actions-linter: ignore=GOGO_HB_TAP_GH_TOKEN
+# github-actions-linter: ignore=GITHUB_TOKEN
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          version: v2.2.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.GOGO_HB_TAP_GH_TOKEN }}
+
+      # Add a step to tag the homebrew-gogo repository after release
+      - name: Tag Homebrew Tap
+        if: success()
+        run: |
+          # Extract version from tag
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "Tagging homebrew-gogo repository with v$VERSION"
+
+          # Clone the homebrew-gogo repository
+          git clone https://x-access-token:${{ secrets.GOGO_HB_TAP_GH_TOKEN }}@github.com/oculus-core/homebrew-gogo.git homebrew-gogo
+          cd homebrew-gogo
+
+          # Configure git user
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and push tag
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
