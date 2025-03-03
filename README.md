@@ -15,12 +15,13 @@ Gogo scaffolds Go projects based on a reference workspace. It includes:
 - Homebrew formula support
 - Commit message validation using Conventional Commits format
 - Automated development tooling setup (assumes VSCode)
+- Support for different project types (CLI, API, Library)
+- Configuration file support
 
 ## TODO
 
 The following features are planned for future releases:
 
-- Support for various project structures (API, CLI, etc.)
 - Integration with linters and pre-commit hooks
 - GitHub Actions workflows for CI/CD
 - Observability tooling with OpenTelemetry
@@ -83,11 +84,99 @@ gogo new my-project --output /path/to/output
 # Create project with default settings
 gogo new my-project --skip-wizard
 
+# Create project with specific project type
+gogo new my-project --type cli
+gogo new my-project --type api
+gogo new my-project --type library
+
+# Create project from configuration file
+gogo new my-project --config path/to/config.yaml
+
 # Show version
 gogo version
 
 # Show help
 gogo help
+```
+
+## Project Types
+
+Gogo supports different project types, each with its own structure and dependencies:
+
+### CLI Applications
+
+```bash
+gogo new my-cli-app --type cli
+```
+
+- Command-line interface structure
+- Includes Cobra for command handling
+- Includes Viper for configuration management
+- Includes version command
+
+### API Applications
+
+```bash
+gogo new my-api --type api
+```
+
+- Web service structure
+- Includes Gin web framework
+- Includes configuration management
+- Basic API endpoints (health check, hello world)
+
+### Library/Package
+
+```bash
+gogo new my-lib --type library
+```
+
+- Package-oriented structure
+- No cmd directory
+- Includes test files
+- Ready for distribution as a Go module
+
+## Configuration File
+
+You can use a YAML configuration file to define your project settings:
+
+```yaml
+# Gogo Project Configuration
+name: my-awesome-project
+module: github.com/username/my-awesome-project
+description: A sample Go project created with Gogo
+license: MIT
+author: Your Name
+type: cli  # Options: default, cli, api, library
+
+# Project structure options
+use_cmd: true
+use_internal: true
+use_pkg: true
+use_test: true
+use_docs: true
+create_readme: true
+create_license: true
+create_makefile: true
+
+# Code quality tools
+use_linters: true
+use_pre_commit_hooks: true
+use_git_hooks: true
+
+# Dependencies
+use_cobra: true
+use_viper: true
+use_gin: false
+
+# CI/CD
+use_github_actions: true
+```
+
+Use the configuration file with:
+
+```bash
+gogo new my-project --config path/to/config.yaml
 ```
 
 ## Wizard Process
@@ -100,6 +189,7 @@ When running `gogo new my-project`, you'll go through:
    - Description
    - Author
    - License
+   - Project type
 
 2. **Project Structure**
    - Select directories (cmd, internal, pkg, etc.)
@@ -125,6 +215,7 @@ make test
 - `cmd/`: Command-line interface
 - `internal/`: Private application code
 - `pkg/`: Public API packages
+- `examples/`: Example configuration files
 
 ## Contributing
 

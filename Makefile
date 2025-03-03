@@ -1,4 +1,4 @@
-.PHONY: all build clean test test-coverage
+.PHONY: all build clean test test-coverage test-integration test-all
 
 # Binary name
 BINARY_NAME=gogo
@@ -26,8 +26,12 @@ LDFLAGS=-ldflags "-X $(MODULE_NAME)/cmd/gogo.Version=$(GIT_TAG) \
 -X $(MODULE_NAME)/cmd/gogo.Commit=$(GIT_COMMIT)$(GIT_DIRTY) \
 -X $(MODULE_NAME)/cmd/gogo.BuildDate=$(BUILD_DATE)"
 
-# Default target (build binary)
-all: build
+# Default target (run tests and build binary)
+all:
+	@echo "Running all tests and building..."
+	$(MAKE) test-all
+	$(MAKE) build
+	@echo "All done!"
 
 # Build binary
 build:
@@ -59,6 +63,19 @@ test-coverage:
 	$(GOTEST) -v ./... -coverprofile=coverage.out
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated at coverage.html"
+
+# Run integration tests
+test-integration:
+	@echo "Running integration tests..."
+	GOGO_INTEGRATION_TEST=1 $(GOTEST) -v ./test/integration/
+	@echo "Integration tests complete"
+
+# Run all tests (unit and integration) but continue even if tests fail
+test-all:
+	@echo "Running all tests..."
+	-$(GOTEST) -v ./...
+	-GOGO_INTEGRATION_TEST=1 $(GOTEST) -v ./test/integration/
+	@echo "All tests complete"
 
 # Install dependencies
 deps:
@@ -110,11 +127,13 @@ test-brew: build
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all               - Default target, builds the binary"
+	@echo "  all               - Run all tests and build the binary"
 	@echo "  build             - Build the binary to $(BIN_DIR)/$(BINARY_NAME)"
 	@echo "  clean             - Clean build artifacts"
 	@echo "  test              - Run tests"
 	@echo "  test-coverage     - Run tests with coverage reporting"
+	@echo "  test-integration  - Run integration tests"
+	@echo "  test-all          - Run both unit and integration tests"
 	@echo "  deps              - Install dependencies"
 	@echo "  lint              - Lint the code"
 	@echo "  fmt               - Format the code"

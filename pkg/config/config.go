@@ -1,13 +1,36 @@
 package config
 
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+)
+
+// ProjectType represents the type of project to generate
+type ProjectType string
+
+const (
+	// TypeCLI is for command-line interface projects
+	TypeCLI ProjectType = "cli"
+	// TypeAPI is for REST API projects
+	TypeAPI ProjectType = "api"
+	// TypeLibrary is for library/package projects
+	TypeLibrary ProjectType = "library"
+	// TypeDefault is the default project type
+	TypeDefault ProjectType = "default"
+)
+
 // ProjectConfig represents the configuration for a gogo project
 type ProjectConfig struct {
 	// General project information
-	Name        string `yaml:"name" json:"name"`
-	Module      string `yaml:"module" json:"module"`
-	Description string `yaml:"description" json:"description"`
-	License     string `yaml:"license" json:"license"`
-	Author      string `yaml:"author" json:"author"`
+	Name        string      `yaml:"name" json:"name"`
+	Module      string      `yaml:"module" json:"module"`
+	Description string      `yaml:"description" json:"description"`
+	License     string      `yaml:"license" json:"license"`
+	Author      string      `yaml:"author" json:"author"`
+	Type        ProjectType `yaml:"type" json:"type"`
 
 	// Project structure options
 	UseCmd         bool `yaml:"use_cmd" json:"use_cmd"`
@@ -27,6 +50,7 @@ type ProjectConfig struct {
 	// Dependencies
 	UseCobra bool `yaml:"use_cobra" json:"use_cobra"`
 	UseViper bool `yaml:"use_viper" json:"use_viper"`
+	UseGin   bool `yaml:"use_gin" json:"use_gin"`
 
 	// CI/CD
 	UseGitHubActions bool `yaml:"use_github_actions" json:"use_github_actions"`
@@ -40,6 +64,7 @@ func NewDefaultProjectConfig() *ProjectConfig {
 		Description:       "A Go project",
 		License:           "MIT",
 		Author:            "",
+		Type:              TypeDefault,
 		UseCmd:            true,
 		UseInternal:       true,
 		UsePkg:            true,
@@ -53,6 +78,81 @@ func NewDefaultProjectConfig() *ProjectConfig {
 		UseGitHooks:       true,
 		UseCobra:          false,
 		UseViper:          false,
+		UseGin:            false,
 		UseGitHubActions:  true,
 	}
+}
+
+// NewCLIProjectConfig creates a new project config for CLI applications
+func NewCLIProjectConfig() *ProjectConfig {
+	cfg := NewDefaultProjectConfig()
+	cfg.Type = TypeCLI
+	cfg.UseCobra = true
+	cfg.UseViper = true
+	return cfg
+}
+
+// NewAPIProjectConfig creates a new project config for API applications
+func NewAPIProjectConfig() *ProjectConfig {
+	cfg := NewDefaultProjectConfig()
+	cfg.Type = TypeAPI
+	cfg.UseGin = true
+	return cfg
+}
+
+// NewLibraryProjectConfig creates a new project config for library projects
+func NewLibraryProjectConfig() *ProjectConfig {
+	cfg := NewDefaultProjectConfig()
+	cfg.Type = TypeLibrary
+	cfg.UseCmd = false
+	return cfg
+}
+
+// GetProjectConfigForType returns a project config for the specified project type
+func GetProjectConfigForType(projType ProjectType) *ProjectConfig {
+	switch projType {
+	case TypeCLI:
+		return NewCLIProjectConfig()
+	case TypeAPI:
+		return NewAPIProjectConfig()
+	case TypeLibrary:
+		return NewLibraryProjectConfig()
+	default:
+		return NewDefaultProjectConfig()
+	}
+}
+
+// LoadConfigFromFile loads a project configuration from a YAML file
+func LoadConfigFromFile(filePath string) (*ProjectConfig, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %v", err)
+	}
+
+	var cfg ProjectConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	return &cfg, nil
+}
+
+// SaveConfigToFile saves a project configuration to a YAML file
+func SaveConfigToFile(cfg *ProjectConfig, filePath string) error {
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %v", err)
+	}
+
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %v", err)
+	}
+
+	return nil
 }

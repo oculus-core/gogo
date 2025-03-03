@@ -1,0 +1,28 @@
+# Gogo Project Configuration
+
+# General project information
+name: my-awesome-project
+module: github.com/username/my-awesome-project
+description: A sample Go project created with Gogo
+license: MIT
+author: Your Name
+type: cli # Options: default, cli, api, library
+# Project structure options
+use_cmd: true
+use_internal: true
+use_pkg: true
+use_test: true
+use_docs: true
+create_readme: true
+create_license: true
+create_makefile: true
+# Code quality tools
+use_linters: true
+use_pre_commit_hooks: true
+use_git_hooks: true
+# Dependencies
+use_cobra: true # Automatically true for CLI type
+use_viper: true # Automatically true for CLI type
+use_gin: false # Automatically true for API type
+# CI/CD
+use_github_actions: true

@@ -51,38 +51,44 @@ func GenerateProject(cfg *config.ProjectConfig, outputDir string) error {
 		if err := os.MkdirAll(dirPath, 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %v", dir, err)
 		}
+
+		// Create a .gitkeep file to ensure the directory is tracked by Git
+		gitkeepPath := filepath.Join(dirPath, ".gitkeep")
+		if err := os.WriteFile(gitkeepPath, []byte(""), 0600); err != nil {
+			return fmt.Errorf("failed to create .gitkeep in %s: %v", dir, err)
+		}
 	}
 
-	// Create .github directory and workflows if needed
+	// Generate initial code based on application type
+	if err := generateInitialCodeByType(cfg, projectDir); err != nil {
+		return err
+	}
+
+	// Generate config file
+	if err := generateConfigFile(cfg, projectDir); err != nil {
+		return err
+	}
+
+	// Generate go.mod file
+	if err := generateGoMod(cfg, projectDir); err != nil {
+		return err
+	}
+
+	// Generate GitHub Actions workflows if enabled
 	if cfg.UseGitHubActions {
 		if err := generateGitHubWorkflows(cfg, projectDir); err != nil {
 			return err
 		}
 	}
 
-	// Generate Go module
-	if err := generateGoMod(cfg, projectDir); err != nil {
-		return err
-	}
-
-	// Generate initial code
-	if err := generateInitialCode(cfg, projectDir); err != nil {
-		return err
-	}
-
-	// Generate templates
-	if err := generateTemplates(cfg, projectDir); err != nil {
-		return err
-	}
-
-	// Generate linter configuration if needed
+	// Generate linter configuration if enabled
 	if cfg.UseLinters {
 		if err := generateLinterConfig(cfg, projectDir); err != nil {
 			return err
 		}
 	}
 
-	// Generate pre-commit hooks if needed
+	// Generate pre-commit hooks configuration if enabled
 	if cfg.UsePreCommitHooks {
 		if err := generatePreCommitConfig(cfg, projectDir); err != nil {
 			return err
@@ -92,8 +98,504 @@ func GenerateProject(cfg *config.ProjectConfig, outputDir string) error {
 	return nil
 }
 
+// generateInitialCodeByType generates initial code based on the application type
+func generateInitialCodeByType(cfg *config.ProjectConfig, projectDir string) error {
+	switch cfg.Type {
+	case config.TypeCLI:
+		return generateCLICode(cfg, projectDir)
+	case config.TypeAPI:
+		return generateAPICode(cfg, projectDir)
+	case config.TypeLibrary:
+		return generateLibraryCode(cfg, projectDir)
+	default:
+		return generateDefaultCode(cfg, projectDir)
+	}
+}
+
+// generateCLICode generates code for a CLI application
+func generateCLICode(cfg *config.ProjectConfig, projectDir string) error {
+	// Create cmd directory structure
+	cmdDir := filepath.Join(projectDir, "cmd", cfg.Name)
+	if err := os.MkdirAll(cmdDir, 0755); err != nil {
+		return fmt.Errorf("failed to create cmd directory: %v", err)
+	}
+
+	// Generate main.go
+	mainPath := filepath.Join(cmdDir, "main.go")
+	mainContent := fmt.Sprintf(`package main
+
+import (
+	"fmt"
+	"os"
+
+	"%s/cmd/%s/cmd"
+)
+
+func main() {
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+`, cfg.Module, cfg.Name)
+
+	if err := os.WriteFile(mainPath, []byte(mainContent), 0600); err != nil {
+		return fmt.Errorf("failed to create main.go: %v", err)
+	}
+
+	// Create cmd package directory
+	cmdPkgDir := filepath.Join(cmdDir, "cmd")
+	if err := os.MkdirAll(cmdPkgDir, 0755); err != nil {
+		return fmt.Errorf("failed to create cmd package directory: %v", err)
+	}
+
+	// Generate root.go with Cobra
+	rootPath := filepath.Join(cmdPkgDir, "root.go")
+	rootContent := fmt.Sprintf(`package cmd
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var cfgFile string
+
+// rootCmd represents the base command when called without any subcommands
+var rootCmd = &cobra.Command{
+	Use:   "%s",
+	Short: "A brief description of your application",
+	Long: `+"`"+`A longer description that spans multiple lines and likely contains
+examples and usage of using your application.`+"`"+`,
+	// Uncomment the following line if your bare application
+	// has an action associated with it:
+	// Run: func(cmd *cobra.Command, args []string) { },
+}
+
+// Execute adds all child commands to the root command and sets flags appropriately.
+// This is called by main.main(). It only needs to happen once to the rootCmd.
+func Execute() error {
+	return rootCmd.Execute()
+}
+
+func init() {
+	cobra.OnInitialize(initConfig)
+
+	// Here you will define your flags and configuration settings.
+	// Cobra supports persistent flags, which, if defined here,
+	// will be global for your application.
+
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.%s.yaml)")
+
+	// Cobra also supports local flags, which will only run
+	// when this action is called directly.
+	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if cfgFile != "" {
+		// Use config file from the flag.
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Find home directory.
+		home, err := os.UserHomeDir()
+		cobra.CheckErr(err)
+
+		// Search config in home directory with name ".%s" (without extension).
+		viper.AddConfigPath(home)
+		viper.SetConfigType("yaml")
+		viper.SetConfigName(".%s")
+	}
+
+	viper.AutomaticEnv() // read in environment variables that match
+
+	// If a config file is found, read it in.
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	}
+}
+`, cfg.Name, cfg.Name, cfg.Name, cfg.Name)
+
+	if err := os.WriteFile(rootPath, []byte(rootContent), 0600); err != nil {
+		return fmt.Errorf("failed to create root.go: %v", err)
+	}
+
+	// Generate version.go
+	versionPath := filepath.Join(cmdPkgDir, "version.go")
+	versionContent := fmt.Sprintf(`package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+// Version information
+var (
+	Version   = "dev"
+	Commit    = "none"
+	BuildDate = "unknown"
+)
+
+// versionCmd represents the version command
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number",
+	Long:  `+"`"+`Print the version, commit, and build date information for your application.`+"`"+`,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("%s version %%s (%%s) built on %%s\n", Version, Commit, BuildDate)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(versionCmd)
+}
+`, cfg.Name)
+
+	if err := os.WriteFile(versionPath, []byte(versionContent), 0600); err != nil {
+		return fmt.Errorf("failed to create version.go: %v", err)
+	}
+
+	return nil
+}
+
+// generateAPICode generates code for an API application
+func generateAPICode(cfg *config.ProjectConfig, projectDir string) error {
+	// Create cmd directory structure
+	cmdDir := filepath.Join(projectDir, "cmd", cfg.Name)
+	if err := os.MkdirAll(cmdDir, 0755); err != nil {
+		return fmt.Errorf("failed to create cmd directory: %v", err)
+	}
+
+	// Generate main.go
+	mainPath := filepath.Join(cmdDir, "main.go")
+	mainContent := fmt.Sprintf(`package main
+
+import (
+	"log"
+
+	"%s/internal/api"
+	"%s/internal/config"
+)
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %%v", err)
+	}
+
+	server := api.NewServer(cfg)
+	if err := server.Run(); err != nil {
+		log.Fatalf("Failed to start server: %%v", err)
+	}
+}
+`, cfg.Module, cfg.Module)
+
+	if err := os.WriteFile(mainPath, []byte(mainContent), 0600); err != nil {
+		return fmt.Errorf("failed to create main.go: %v", err)
+	}
+
+	// Create internal/config directory
+	configDir := filepath.Join(projectDir, "internal", "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create internal/config directory: %v", err)
+	}
+
+	// Generate config.go
+	configPath := filepath.Join(configDir, "config.go")
+	configContent := `package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
+
+// Config holds the application configuration
+type Config struct {
+	Server ServerConfig
+}
+
+// ServerConfig holds the server configuration
+type ServerConfig struct {
+	Port int
+	Host string
+}
+
+// Load loads the configuration from environment variables
+func Load() (*Config, error) {
+	port := 8080
+	if portStr := os.Getenv("PORT"); portStr != "" {
+		var err error
+		port, err = strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PORT: %v", err)
+		}
+	}
+
+	host := "localhost"
+	if hostEnv := os.Getenv("HOST"); hostEnv != "" {
+		host = hostEnv
+	}
+
+	return &Config{
+		Server: ServerConfig{
+			Port: port,
+			Host: host,
+		},
+	}, nil
+}
+`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+		return fmt.Errorf("failed to create config.go: %v", err)
+	}
+
+	// Create internal/api directory
+	apiDir := filepath.Join(projectDir, "internal", "api")
+	if err := os.MkdirAll(apiDir, 0755); err != nil {
+		return fmt.Errorf("failed to create internal/api directory: %v", err)
+	}
+
+	// Generate server.go
+	serverPath := filepath.Join(apiDir, "server.go")
+	serverContent := fmt.Sprintf(`package api
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"%s/internal/config"
+)
+
+// Server represents the API server
+type Server struct {
+	router *gin.Engine
+	cfg    *config.Config
+}
+
+// NewServer creates a new API server
+func NewServer(cfg *config.Config) *Server {
+	router := gin.Default()
+
+	server := &Server{
+		router: router,
+		cfg:    cfg,
+	}
+
+	server.registerRoutes()
+
+	return server
+}
+
+// Run starts the server
+func (s *Server) Run() error {
+	addr := fmt.Sprintf("%%s:%%d", s.cfg.Server.Host, s.cfg.Server.Port)
+	return s.router.Run(addr)
+}
+
+// registerRoutes sets up the API routes
+func (s *Server) registerRoutes() {
+	s.router.GET("/health", s.healthCheck)
+
+	v1 := s.router.Group("/api/v1")
+	{
+		v1.GET("/hello", s.helloWorld)
+	}
+}
+
+// healthCheck handles the health check endpoint
+func (s *Server) healthCheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+	})
+}
+
+// helloWorld handles the hello world endpoint
+func (s *Server) helloWorld(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Hello, World!",
+	})
+}
+`, cfg.Module)
+
+	if err := os.WriteFile(serverPath, []byte(serverContent), 0600); err != nil {
+		return fmt.Errorf("failed to create server.go: %v", err)
+	}
+
+	return nil
+}
+
+// generateLibraryCode generates code for a library
+func generateLibraryCode(cfg *config.ProjectConfig, projectDir string) error {
+	// Create pkg directory structure
+	pkgDir := filepath.Join(projectDir, "pkg", cfg.Name)
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		return fmt.Errorf("failed to create pkg directory: %v", err)
+	}
+
+	// Generate library.go
+	libPath := filepath.Join(pkgDir, fmt.Sprintf("%s.go", cfg.Name))
+	libContent := fmt.Sprintf(`package %s
+
+// Version is the current version of the library
+const Version = "0.1.0"
+
+// Hello returns a greeting message
+func Hello(name string) string {
+	if name == "" {
+		name = "World"
+	}
+	return "Hello, " + name + "!"
+}
+`, cfg.Name)
+
+	if err := os.WriteFile(libPath, []byte(libContent), 0600); err != nil {
+		return fmt.Errorf("failed to create library file: %v", err)
+	}
+
+	// Generate test file
+	testPath := filepath.Join(pkgDir, fmt.Sprintf("%s_test.go", cfg.Name))
+	testContent := fmt.Sprintf(`package %s
+
+import "testing"
+
+func TestHello(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty name",
+			input:    "",
+			expected: "Hello, World!",
+		},
+		{
+			name:     "with name",
+			input:    "Gopher",
+			expected: "Hello, Gopher!",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Hello(tt.input); got != tt.expected {
+				t.Errorf("Hello() = %%q, want %%q", got, tt.expected)
+			}
+		})
+	}
+}
+`, cfg.Name)
+
+	if err := os.WriteFile(testPath, []byte(testContent), 0600); err != nil {
+		return fmt.Errorf("failed to create test file: %v", err)
+	}
+
+	return nil
+}
+
+// generateDefaultCode generates code for a default project
+func generateDefaultCode(cfg *config.ProjectConfig, projectDir string) error {
+	// Create a simple main.go in the project root
+	mainPath := filepath.Join(projectDir, "main.go")
+	mainContent := fmt.Sprintf(`package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello from %s!")
+}
+`, cfg.Name)
+
+	if err := os.WriteFile(mainPath, []byte(mainContent), 0600); err != nil {
+		return fmt.Errorf("failed to create main.go: %v", err)
+	}
+
+	return nil
+}
+
+// generateConfigFile creates the gogo.yaml configuration file
+func generateConfigFile(cfg *config.ProjectConfig, projectDir string) error {
+	configPath := filepath.Join(projectDir, "gogo.yaml")
+
+	configContent := fmt.Sprintf(`# Gogo Project Configuration
+# Generated on: %s
+
+# Project Information
+project:
+  name: %q
+  module: %q
+  description: %q
+  license: %q
+  author: %q
+
+# Project Structure
+structure:
+  use_cmd: %t
+  use_internal: %t
+  use_pkg: %t
+  use_test: %t
+  use_docs: %t
+
+# Generated Files
+files:
+  create_readme: %t
+  create_license: %t
+  create_makefile: %t
+
+# Code Quality
+quality:
+  use_linters: %t
+  use_pre_commit_hooks: %t
+  use_git_hooks: %t
+
+# Dependencies
+dependencies:
+  use_cobra: %t
+  use_viper: %t
+
+# CI/CD
+cicd:
+  use_github_actions: %t
+`,
+		time.Now().Format(time.RFC3339),
+		cfg.Name,
+		cfg.Module,
+		cfg.Description,
+		cfg.License,
+		cfg.Author,
+		cfg.UseCmd,
+		cfg.UseInternal,
+		cfg.UsePkg,
+		cfg.UseTest,
+		cfg.UseDocs,
+		cfg.CreateReadme,
+		cfg.CreateLicense,
+		cfg.CreateMakefile,
+		cfg.UseLinters,
+		cfg.UsePreCommitHooks,
+		cfg.UseGitHooks,
+		cfg.UseCobra,
+		cfg.UseViper,
+		cfg.UseGitHubActions,
+	)
+
+	return os.WriteFile(configPath, []byte(configContent), 0600)
+}
+
 // generateRootFiles creates the basic files at the project root
 func generateRootFiles(cfg *config.ProjectConfig, projectDir string) error {
+	// Generate config file
+	if err := generateConfigFile(cfg, projectDir); err != nil {
+		return fmt.Errorf("failed to generate config file: %w", err)
+	}
+
 	// Generate README.md
 	if cfg.CreateReadme {
 		readmePath := filepath.Join(projectDir, "README.md")
@@ -298,6 +800,11 @@ func generateGoMod(cfg *config.ProjectConfig, projectDir string) error {
 func generateGitHubWorkflows(cfg *config.ProjectConfig, projectDir string) error {
 	workflowDir := filepath.Join(projectDir, ".github", "workflows")
 
+	// Create the workflow directory if it doesn't exist
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		return fmt.Errorf("failed to create workflow directory: %v", err)
+	}
+
 	// CI workflow
 	ciWorkflowPath := filepath.Join(workflowDir, "ci.yml")
 	ciWorkflowContent := "name: CI\n\n" +
@@ -462,171 +969,10 @@ func generatePreCommitConfig(cfg *config.ProjectConfig, projectDir string) error
 	return os.WriteFile(commitlintPath, []byte(commitlintContent), 0600)
 }
 
-// generateInitialCode creates the initial Go code for the project
-func generateInitialCode(cfg *config.ProjectConfig, projectDir string) error {
-	// Create main.go
-	mainGoPath := filepath.Join(projectDir, "main.go")
-	var mainGoContent string
-
-	if cfg.UseCobra {
-		// If using Cobra, create a CLI-style main.go
-		mainGoContent = fmt.Sprintf("package main\n\n"+
-			"import (\n"+
-			"\t\"fmt\"\n"+
-			"\t\"os\"\n\n"+
-			"\t\"%s/cmd\"\n"+
-			")\n\n"+
-			"func main() {\n"+
-			"\tif err := cmd.Execute(); err != nil {\n"+
-			"\t\tfmt.Fprintln(os.Stderr, err)\n"+
-			"\t\tos.Exit(1)\n"+
-			"\t}\n"+
-			"}\n", cfg.Module)
-
-		// Create cmd directory structure for Cobra
-		cmdDir := filepath.Join(projectDir, "cmd")
-		if err := os.MkdirAll(cmdDir, 0755); err != nil {
-			return err
-		}
-
-		// Create root.go for Cobra
-		rootGoPath := filepath.Join(cmdDir, "root.go")
-
-		// Start with imports
-		rootGoContent := "package cmd\n\n" +
-			"import (\n" +
-			"\t\"fmt\"\n" +
-			"\t\"os\"\n\n" +
-			"\t\"github.com/spf13/cobra\"\n"
-
-		// Add viper import if needed
-		if cfg.UseViper {
-			rootGoContent += "\t\"github.com/spf13/viper\"\n"
-		}
-		rootGoContent += ")\n\n"
-
-		// Add config variable if viper is used
-		if cfg.UseViper {
-			rootGoContent += "var cfgFile string\n\n"
-		}
-
-		// Add root command
-		rootGoContent += "// rootCmd represents the base command when called without any subcommands\n" +
-			"var rootCmd = &cobra.Command{\n" +
-			fmt.Sprintf("\tUse:   \"%s\",\n", strings.ToLower(cfg.Name)) +
-			fmt.Sprintf("\tShort: \"%s\",\n", cfg.Description) +
-			fmt.Sprintf("\tLong: `%s`,\n", cfg.Description) +
-			"\t// Run: func(cmd *cobra.Command, args []string) { },\n" +
-			"}\n\n" +
-			"// Execute adds all child commands to the root command and sets flags appropriately.\n" +
-			"// This is called by main.main(). It only needs to happen once to the rootCmd.\n" +
-			"func Execute() error {\n" +
-			"\treturn rootCmd.Execute()\n" +
-			"}\n\n" +
-			"func init() {\n"
-
-		// Add viper initialization if needed
-		if cfg.UseViper {
-			rootGoContent += "\tcobra.OnInitialize(initConfig)\n\n" +
-				"\t// Global flags\n" +
-				fmt.Sprintf("\trootCmd.PersistentFlags().StringVar(&cfgFile, \"config\", \"\", \"config file (default is $HOME/.%s.yaml)\")\n",
-					strings.ToLower(cfg.Name))
-		} else {
-			rootGoContent += "\t// Add your flags here\n"
-		}
-
-		rootGoContent += "}\n"
-
-		// Add viper config function if needed
-		if cfg.UseViper {
-			rootGoContent += "\n// initConfig reads in config file and ENV variables if set.\n" +
-				"func initConfig() {\n" +
-				"\tif cfgFile != \"\" {\n" +
-				"\t\t// Use config file from the flag.\n" +
-				"\t\tviper.SetConfigFile(cfgFile)\n" +
-				"\t} else {\n" +
-				"\t\t// Find home directory.\n" +
-				"\t\thome, err := os.UserHomeDir()\n" +
-				"\t\tcobra.CheckErr(err)\n\n" +
-				"\t\t// Search config in home directory with name \"." + strings.ToLower(cfg.Name) + "\" (without extension).\n" +
-				"\t\tviper.AddConfigPath(home)\n" +
-				"\t\tviper.SetConfigType(\"yaml\")\n" +
-				"\t\tviper.SetConfigName(\"." + strings.ToLower(cfg.Name) + "\")\n" +
-				"\t}\n\n" +
-				"\tviper.AutomaticEnv() // read in environment variables that match\n\n" +
-				"\t// If a config file is found, read it in.\n" +
-				"\tif err := viper.ReadInConfig(); err == nil {\n" +
-				"\t\tfmt.Fprintln(os.Stderr, \"Using config file:\", viper.ConfigFileUsed())\n" +
-				"\t}\n" +
-				"}\n"
-		}
-
-		if err := os.WriteFile(rootGoPath, []byte(rootGoContent), 0600); err != nil {
-			return err
-		}
-
-		// Create version.go for Cobra
-		versionGoPath := filepath.Join(cmdDir, "version.go")
-		versionGoContent := "package cmd\n\n" +
-			"import (\n" +
-			"\t\"fmt\"\n\n" +
-			"\t\"github.com/spf13/cobra\"\n" +
-			")\n\n" +
-			"// Version information - will be set during build via ldflags\n" +
-			"var (\n" +
-			"\tVersion   = \"dev\"\n" +
-			"\tCommit    = \"none\"\n" +
-			"\tBuildDate = \"unknown\"\n" +
-			")\n\n" +
-			"// versionCmd represents the version command\n" +
-			"var versionCmd = &cobra.Command{\n" +
-			"\tUse:   \"version\",\n" +
-			"\tShort: \"Print the version information\",\n" +
-			fmt.Sprintf("\tLong:  \"Display the version, commit, and build date information for the %s CLI\",\n", cfg.Name) +
-			"\tRun: func(cmd *cobra.Command, args []string) {\n" +
-			fmt.Sprintf("\t\tfmt.Println(\"%s CLI\")\n", cfg.Name) +
-			"\t\tfmt.Println(\"--------\")\n" +
-			"\t\tfmt.Printf(\"Version:    %%s\\n\", Version)\n" +
-			"\t\tfmt.Printf(\"Commit:     %%s\\n\", Commit)\n" +
-			"\t\tfmt.Printf(\"Build Date: %%s\\n\", BuildDate)\n" +
-			"\t},\n" +
-			"}\n\n" +
-			"func init() {\n" +
-			"\trootCmd.AddCommand(versionCmd)\n" +
-			"}\n"
-
-		if err := os.WriteFile(versionGoPath, []byte(versionGoContent), 0600); err != nil {
-			return err
-		}
-	} else {
-		// Simple main.go
-		mainGoContent = fmt.Sprintf("package main\n\n"+
-			"import (\n"+
-			"\t\"fmt\"\n"+
-			")\n\n"+
-			"func main() {\n"+
-			"\tfmt.Println(\"Hello from %s!\")\n"+
-			"}\n", cfg.Name)
-	}
-
-	if err := os.WriteFile(mainGoPath, []byte(mainGoContent), 0600); err != nil {
-		return err
-	}
-
-	// Create main_test.go
-	mainTestGoPath := filepath.Join(projectDir, "main_test.go")
-	mainTestGoContent := "package main\n\n" +
-		"import (\n" +
-		"\t\"testing\"\n" +
-		")\n\n" +
-		"func TestMain(t *testing.T) {\n" +
-		"\t// Add your tests here\n" +
-		"}\n"
-
-	return os.WriteFile(mainTestGoPath, []byte(mainTestGoContent), 0600)
-}
-
+// TODO: Add template generation in a future version
 // generateTemplates creates code templates for the project
+//
+//nolint:unused
 func generateTemplates(cfg *config.ProjectConfig, projectDir string) error {
 	// Create templates directory
 	templatesDir := filepath.Join(projectDir, "templates")

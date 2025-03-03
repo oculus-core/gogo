@@ -54,9 +54,11 @@ func RunWizard(cfg *config.ProjectConfig) error {
 	modulePrompt := &survey.Input{
 		Message: "Module path:",
 		Default: cfg.Module,
-		Help:    "The Go module path (e.g., github.com/username/project-name)",
 	}
 	if err := survey.AskOne(modulePrompt, &cfg.Module); err != nil {
+		if err == terminal.InterruptErr {
+			return fmt.Errorf("wizard cancelled")
+		}
 		return err
 	}
 
@@ -66,6 +68,9 @@ func RunWizard(cfg *config.ProjectConfig) error {
 		Default: cfg.Description,
 	}
 	if err := survey.AskOne(descPrompt, &cfg.Description); err != nil {
+		if err == terminal.InterruptErr {
+			return fmt.Errorf("wizard cancelled")
+		}
 		return err
 	}
 
@@ -75,18 +80,75 @@ func RunWizard(cfg *config.ProjectConfig) error {
 		Default: cfg.Author,
 	}
 	if err := survey.AskOne(authorPrompt, &cfg.Author); err != nil {
+		if err == terminal.InterruptErr {
+			return fmt.Errorf("wizard cancelled")
+		}
 		return err
 	}
 
 	// License
-	licenseOptions := []string{"MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "None"}
 	licensePrompt := &survey.Select{
 		Message: "License:",
-		Options: licenseOptions,
+		Options: []string{"MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "None"},
 		Default: cfg.License,
 	}
 	if err := survey.AskOne(licensePrompt, &cfg.License); err != nil {
+		if err == terminal.InterruptErr {
+			return fmt.Errorf("wizard cancelled")
+		}
 		return err
+	}
+
+	// Now ask for project details using survey
+	fmt.Println(highlightStyle.Render("\nProject Details:"))
+
+	// Project Type
+	appTypePrompt := &survey.Select{
+		Message: "Project Type:",
+		Options: []string{
+			string(config.TypeDefault),
+			string(config.TypeCLI),
+			string(config.TypeAPI),
+			string(config.TypeLibrary),
+		},
+		Default: string(cfg.Type),
+		Description: func(value string, _ int) string {
+			switch value {
+			case string(config.TypeCLI):
+				return "Command-line application (includes Cobra and Viper)"
+			case string(config.TypeAPI):
+				return "API/Web service (includes Gin)"
+			case string(config.TypeLibrary):
+				return "Library/Package (no cmd directory)"
+			default:
+				return "Generic Go project"
+			}
+		},
+	}
+
+	var appTypeStr string
+	if err := survey.AskOne(appTypePrompt, &appTypeStr); err != nil {
+		if err == terminal.InterruptErr {
+			return fmt.Errorf("wizard cancelled")
+		}
+		return err
+	}
+
+	// Update the config based on the selected project type
+	prevType := cfg.Type
+	cfg.Type = config.ProjectType(appTypeStr)
+
+	// Only apply type-specific settings if the type has changed
+	if prevType != cfg.Type {
+		switch cfg.Type {
+		case config.TypeCLI:
+			cfg.UseCobra = true
+			cfg.UseViper = true
+		case config.TypeAPI:
+			cfg.UseGin = true
+		case config.TypeLibrary:
+			cfg.UseCmd = false
+		}
 	}
 
 	// Project structure section
