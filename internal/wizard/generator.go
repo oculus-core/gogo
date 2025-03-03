@@ -444,7 +444,7 @@ func generateLibraryCode(cfg *config.ProjectConfig, projectDir string) error {
 	libContent := fmt.Sprintf(`package %s
 
 // Version is the current version of the library
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 // Hello returns a greeting message
 func Hello(name string) string {

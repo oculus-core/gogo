@@ -5,7 +5,17 @@ All notable changes to the Gogo CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.1.0] - 2024-02-27
+## [v0.1.1] - 2025-03-03
+
+- Added support for multiple project types (CLI, API, Library)
+- Implemented configuration file generation and loading
+- Created extensive test coverage for project generation and configuration
+- Enhanced wizard to support project type selection
+- Added integration tests for project generation
+- Improved code generation for different project structures
+- Updated documentation and README with new features
+
+## [v0.1.0] - 2025-02-27
 
 ### Added
 
