@@ -87,5 +87,5 @@ brews:
       include GogoVersioning
       depends_on :macos => :catalina
     url_template: "https://github.com/oculus-core/gogo/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    # Only update this formula for 0.1.x versions - using string prefix check instead of semver function
-    skip_upload: '{{ if ne (slice .Version 0 3) "0.1" }}true{{ end }}'
+    # Only update this formula for 0.1.x versions - using hasPrefix function
+    skip_upload: '{{ if not (hasPrefix .Version "0.1") }}true{{ end }}'
